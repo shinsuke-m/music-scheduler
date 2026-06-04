@@ -910,20 +910,21 @@ function transitionToSlot(slot) {
   const fadeSec = state.settings.fadeOutSec;
   const gapMs = state.settings.gapSec * 1000;
 
-  // Web Audio API GainNodeでフェードアウト
   ensureAudioContext();
+  // スケジュール済みの変化をすべてキャンセルしてから改めてフェード設定
   const now = audioCtx.currentTime;
-  gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+  gainNode.gain.cancelScheduledValues(now);
+  gainNode.gain.setValueAtTime(1, now);
   gainNode.gain.linearRampToValueAtTime(0, now + fadeSec);
 
   setTimeout(() => {
     audio.pause();
+    // ゲインを確実に0に固定
     gainNode.gain.cancelScheduledValues(0);
-    gainNode.gain.setValueAtTime(0, 0);
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
     setTimeout(() => {
       currentSlotKey = slot.type + ':' + slot.targetId;
       buildQueue(slot);
-      gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
       isFading = false;
       startPlayback();
     }, gapMs);
@@ -947,6 +948,8 @@ function startPlayback() {
   const song = playQueue[currentTrackIdx % playQueue.length];
   ensureAudioContext();
   audio.src = song.objectUrl;
+  // スケジュール済みの変化をすべてキャンセルしてからゲインを1に確定
+  gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
   gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
   audio.play().then(() => { isPlaying = true; updatePlayBtn(); updatePlayerDisplay(); }).catch(e => console.log('play error', e));
 }
