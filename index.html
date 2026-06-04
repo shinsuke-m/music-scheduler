@@ -907,29 +907,27 @@ function checkScheduleNow() {
 
 function transitionToSlot(slot) {
   isFading = true;
-  const fadeMs = state.settings.fadeOutSec * 1000;
+  const fadeSec = state.settings.fadeOutSec;
   const gapMs = state.settings.gapSec * 1000;
 
-  const startVol = audio.volume > 0 ? audio.volume : 1;
-  const startTime = Date.now();
+  // Web Audio API GainNodeでフェードアウト
+  ensureAudioContext();
+  const now = audioCtx.currentTime;
+  gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+  gainNode.gain.linearRampToValueAtTime(0, now + fadeSec);
 
-  const fadeInterval = setInterval(() => {
-    const elapsed = Date.now() - startTime;
-    const ratio = Math.min(elapsed / fadeMs, 1);
-    audio.volume = Math.max(0, startVol * (1 - ratio));
-    if (ratio >= 1) {
-      clearInterval(fadeInterval);
-      audio.volume = 0;
-      audio.pause();
-      setTimeout(() => {
-        currentSlotKey = slot.type + ':' + slot.targetId;
-        buildQueue(slot);
-        audio.volume = 1;
-        isFading = false;
-        startPlayback();
-      }, gapMs);
-    }
-  }, 50);
+  setTimeout(() => {
+    audio.pause();
+    gainNode.gain.cancelScheduledValues(0);
+    gainNode.gain.setValueAtTime(0, 0);
+    setTimeout(() => {
+      currentSlotKey = slot.type + ':' + slot.targetId;
+      buildQueue(slot);
+      gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
+      isFading = false;
+      startPlayback();
+    }, gapMs);
+  }, fadeSec * 1000);
 }
 
 function buildQueue(slot) {
@@ -947,12 +945,19 @@ function buildQueue(slot) {
 function startPlayback() {
   if (!playQueue.length) { updatePlayerDisplay(); return; }
   const song = playQueue[currentTrackIdx % playQueue.length];
+  ensureAudioContext();
   audio.src = song.objectUrl;
-  audio.volume = 1;
+  gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
   audio.play().then(() => { isPlaying = true; updatePlayBtn(); updatePlayerDisplay(); }).catch(e => console.log('play error', e));
 }
 
-function stopPlayback() { audio.pause(); isPlaying = false; updatePlayBtn(); updatePlayerDisplay(); }
+function stopPlayback() {
+  gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
+  audio.pause();
+  isPlaying = false;
+  updatePlayBtn();
+  updatePlayerDisplay();
+}
 
 function togglePlay() {
   if (isPlaying) { audio.pause(); isPlaying = false; }
@@ -1044,6 +1049,21 @@ function updateNextEvent() {
 }
 
 // ===== AUDIO =====
+// Web Audio API
+let audioCtx = null;
+let gainNode = null;
+let sourceConnected = false;
+
+function ensureAudioContext() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  gainNode = audioCtx.createGain();
+  gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
+  gainNode.connect(audioCtx.destination);
+  const source = audioCtx.createMediaElementSource(audio);
+  source.connect(gainNode);
+}
+
 function setupAudio() {
   audio.addEventListener('ended', () => {
     currentTrackIdx = (currentTrackIdx + 1) % Math.max(1, playQueue.length);
@@ -1056,7 +1076,11 @@ function setupAudio() {
     document.getElementById('player-time').textContent = formatTime(audio.currentTime) + ' / ' + formatTime(audio.duration);
   });
   audio.addEventListener('pause', () => { isPlaying = false; updatePlayBtn(); });
-  audio.addEventListener('play', () => { isPlaying = true; updatePlayBtn(); });
+  audio.addEventListener('play', () => {
+    isPlaying = true; updatePlayBtn();
+    // AudioContextがsuspendedの場合はresumeする（iOS対策）
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  });
   // 自動復帰
   audio.addEventListener('pause', () => {
     setTimeout(() => {
