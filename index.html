@@ -603,17 +603,46 @@ function openRoutineModal(id) {
   openModal('routine-modal');
 }
 
+// 2つのスロットが時間重複しているか判定
+function slotsOverlap(a, b) {
+  const as = timeToMinutes(a.start), ae = timeToMinutes(a.end);
+  const bs = timeToMinutes(b.start), be = timeToMinutes(b.end);
+  function toRanges(s, e) {
+    if (s < e) return [[s, e]];
+    return [[s, 1440], [0, e]];
+  }
+  const ra = toRanges(as, ae), rb = toRanges(bs, be);
+  for (const [as2, ae2] of ra) for (const [bs2, be2] of rb) {
+    if (as2 < be2 && bs2 < ae2) return true;
+  }
+  return false;
+}
+function getOverlappingIndices(slots) {
+  const overlapping = new Set();
+  for (let i = 0; i < slots.length; i++)
+    for (let j = i + 1; j < slots.length; j++)
+      if (slotsOverlap(slots[i], slots[j])) { overlapping.add(i); overlapping.add(j); }
+  return overlapping;
+}
 function renderTimeslotList() {
   const el = document.getElementById('timeslot-list');
   if (!tempTimeslots.length) { el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0;">まだ時間帯がありません</div>'; return; }
-  el.innerHTML = tempTimeslots.map((ts, i) => `
-    <div class="timeslot">
-      <div class="timeslot-header">
-        <div class="timeslot-time">${ts.start} 〜 ${ts.end}</div>
-        <button class="timeslot-del" onclick="removeTimeslot(${i})">✕</button>
-      </div>
-      <div class="timeslot-track">${getTargetName(ts.type, ts.targetId)}</div>
-    </div>`).join('');
+  const overlapping = getOverlappingIndices(tempTimeslots);
+  el.innerHTML = tempTimeslots.map(function(ts, i) {
+    const hasOverlap = overlapping.has(i);
+    const borderStyle = hasOverlap ? 'border-color:var(--danger);background:var(--danger-light);' : '';
+    const timeColor = hasOverlap ? 'color:var(--danger);' : '';
+    const warnIcon = hasOverlap ? '⚠ ' : '';
+    const warnMsg = hasOverlap ? '<div style="font-size:11px;color:var(--danger);margin-top:4px;">他のスロットと時間が重複しています</div>' : '';
+    return '<div class="timeslot" style="' + borderStyle + '">'
+      + '<div class="timeslot-header">'
+      + '<div class="timeslot-time" style="' + timeColor + '">' + warnIcon + ts.start + ' 〜 ' + ts.end + '</div>'
+      + '<button class="timeslot-del" onclick="removeTimeslot(' + i + ')">✕</button>'
+      + '</div>'
+      + '<div class="timeslot-track">' + getTargetName(ts.type, ts.targetId) + '</div>'
+      + warnMsg
+      + '</div>';
+  }).join('');
 }
 
 function getTargetName(type, id) {
@@ -653,7 +682,11 @@ function confirmTimeslot() {
   if (start === end) { alert('開始と終了が同じです'); return; }
   const [type, ...rest] = val.split(':');
   const targetId = rest.join(':');
-  tempTimeslots.push({ start, end, type, targetId });
+  const newSlot = { start, end, type, targetId };
+  const testSlots = [...tempTimeslots, newSlot];
+  const overlapping = getOverlappingIndices(testSlots);
+  // 追加時は重複を許容（編集画面で⚠表示し、保存時にブロック）
+  tempTimeslots.push(newSlot);
   tempTimeslots.sort((a, b) => a.start.localeCompare(b.start));
   renderTimeslotList(); closeModal('timeslot-modal');
 }
@@ -661,6 +694,11 @@ function confirmTimeslot() {
 function saveRoutine() {
   const name = document.getElementById('routine-name-input').value.trim();
   if (!name) { alert('名前を入力してください'); return; }
+  const overlapping = getOverlappingIndices(tempTimeslots);
+  if (overlapping.size > 0) {
+    alert('時間が重複しているスロットがあります。重複を解消してから保存してください。');
+    return;
+  }
   if (editingRoutineId) {
     const rt = state.routines.find(r => r.id === editingRoutineId);
     rt.name = name; rt.slots = tempTimeslots;
