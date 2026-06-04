@@ -272,7 +272,15 @@
             <div class="card-row-sub">MP3・WAV対応</div>
           </div>
           <button class="btn btn-sm btn-primary" onclick="document.getElementById('file-input').click()">追加</button>
-          <input type="file" id="file-input" accept="audio/*" multiple style="display:none" onchange="addFiles(this)">
+          <input type="file" id="file-input" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" multiple style="display:none" onchange="addFiles(this)">
+          <input type="file" id="file-input-ios" accept="*/*" multiple style="display:none" onchange="addFiles(this)">
+        </div>
+        <div class="card-row">
+          <div class="card-row-label">
+            <div>選択できない場合はこちら（iOS用）</div>
+            <div class="card-row-sub">ファイルがグレーアウトする場合に使用</div>
+          </div>
+          <button class="btn btn-sm" onclick="document.getElementById('file-input-ios').click()">追加</button>
         </div>
       </div>
       <div class="notice mt-12">
