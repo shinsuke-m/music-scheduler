@@ -119,6 +119,19 @@
   .empty-icon { font-size: 40px; margin-bottom: 12px; }
   .empty p { font-size: 14px; }
   .fade-overlay { position: fixed; inset: 0; background: black; opacity: 0; pointer-events: none; z-index: 200; transition: opacity 0.1s; }
+
+  /* ドラムロールピッカー */
+  .drum-picker { display: flex; align-items: center; justify-content: center; gap: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; position: relative; height: 180px; }
+  .drum-picker::before, .drum-picker::after { content: ''; position: absolute; left: 0; right: 0; height: 66px; z-index: 2; pointer-events: none; }
+  .drum-picker::before { top: 0; background: linear-gradient(to bottom, var(--bg) 30%, transparent); }
+  .drum-picker::after { bottom: 0; background: linear-gradient(to top, var(--bg) 30%, transparent); }
+  .drum-picker .selector { position: absolute; top: 50%; left: 8px; right: 8px; height: 44px; transform: translateY(-50%); border-top: 1.5px solid var(--accent); border-bottom: 1.5px solid var(--accent); border-radius: 4px; pointer-events: none; z-index: 3; }
+  .drum-sep { font-size: 24px; font-weight: 600; color: var(--text2); z-index: 4; flex-shrink: 0; padding: 0 2px; }
+  .drum-col { flex: 1; overflow-y: scroll; height: 180px; scroll-snap-type: y mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .drum-col::-webkit-scrollbar { display: none; }
+  .drum-item { height: 44px; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 500; color: var(--text2); scroll-snap-align: center; cursor: pointer; transition: color 0.15s, font-size 0.15s; }
+  .drum-item.selected { color: var(--text); font-size: 26px; font-weight: 600; }
+  .drum-pad { height: 68px; flex-shrink: 0; }
   .mt-8 { margin-top: 8px; } .mt-12 { margin-top: 12px; } .mt-16 { margin-top: 16px; }
   .flex { display: flex; } .flex-1 { flex: 1; } .gap-8 { gap: 8px; } .items-center { align-items: center; } .justify-between { justify-content: space-between; }
 </style>
@@ -353,15 +366,19 @@
     <div class="modal-handle"></div>
     <div class="modal-title">時間帯を設定</div>
     <div class="modal-body">
-      <div class="form-group">
-        <label class="form-label">開始時刻</label>
-        <select class="form-input" id="ts-start"></select>
+      <div class="form-label">開始時刻</div>
+      <div class="drum-picker" id="picker-start">
+        <div class="drum-col" id="drum-start-h"></div>
+        <div class="drum-sep">:</div>
+        <div class="drum-col" id="drum-start-m"></div>
       </div>
-      <div class="form-group">
-        <label class="form-label">終了時刻</label>
-        <select class="form-input" id="ts-end"></select>
+      <div class="form-label" style="margin-top:16px;">終了時刻</div>
+      <div class="drum-picker" id="picker-end">
+        <div class="drum-col" id="drum-end-h"></div>
+        <div class="drum-sep">:</div>
+        <div class="drum-col" id="drum-end-m"></div>
       </div>
-      <div class="form-group">
+      <div class="form-group" style="margin-top:16px;">
         <label class="form-label">再生する曲またはプレイリスト</label>
         <select class="form-input" id="ts-target"><option value="">— 選択 —</option></select>
       </div>
@@ -674,12 +691,85 @@ function addTimeslot() {
 
 function removeTimeslot(i) { tempTimeslots.splice(i, 1); renderTimeslotList(); }
 
+// ===== DRUM PICKER =====
 function buildTimeOptions() {
-  const times = [];
-  for (let h = 0; h < 24; h++) for (let m of [0, 30]) times.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
-  const s = document.getElementById('ts-start'), e = document.getElementById('ts-end');
-  s.innerHTML = e.innerHTML = times.map(t => `<option value="${t}">${t}</option>`).join('');
-  s.value = '07:00'; e.value = '15:00';
+  initDrumPicker('start', 7, 0);
+  initDrumPicker('end', 15, 0);
+}
+
+function initDrumPicker(id, defH, defM) {
+  const hEl = document.getElementById('drum-' + id + '-h');
+  const mEl = document.getElementById('drum-' + id + '-m');
+
+  // パッド（上下の空白）
+  const pad = () => '<div class="drum-pad"></div>';
+
+  // 時間 0〜23
+  hEl.innerHTML = pad() + Array.from({length:24}, (_,i) => {
+    return '<div class="drum-item" data-val="' + i + '">' + String(i).padStart(2,'0') + '</div>';
+  }).join('') + pad();
+
+  // 分 0〜55（5分刻み）
+  const mins = Array.from({length:12}, (_,i) => i*5);
+  mEl.innerHTML = pad() + mins.map(m => {
+    return '<div class="drum-item" data-val="' + m + '">' + String(m).padStart(2,'0') + '</div>';
+  }).join('') + pad();
+
+  // 選択マーカー
+  const picker = document.getElementById('picker-' + id);
+  if (!picker.querySelector('.selector')) {
+    const sel = document.createElement('div');
+    sel.className = 'selector';
+    picker.appendChild(sel);
+  }
+
+  // スクロールイベント
+  [hEl, mEl].forEach(col => {
+    col.addEventListener('scroll', () => updateDrumSelection(col), {passive:true});
+  });
+
+  // デフォルト値にスクロール
+  scrollDrumTo(hEl, defH, false);
+  scrollDrumTo(mEl, defM, false);
+  setTimeout(() => {
+    updateDrumSelection(hEl);
+    updateDrumSelection(mEl);
+  }, 50);
+}
+
+function scrollDrumTo(col, val, smooth) {
+  const items = col.querySelectorAll('.drum-item');
+  for (let i = 0; i < items.length; i++) {
+    if (parseInt(items[i].dataset.val) === val) {
+      const top = i * 44;
+      col.scrollTo({ top, behavior: smooth ? 'smooth' : 'instant' });
+      break;
+    }
+  }
+}
+
+function updateDrumSelection(col) {
+  const itemH = 44;
+  const scrollTop = col.scrollTop;
+  const centerIdx = Math.round(scrollTop / itemH);
+  col.querySelectorAll('.drum-item').forEach((el, i) => {
+    el.classList.toggle('selected', i === centerIdx);
+  });
+}
+
+function getDrumValue(id) {
+  const hEl = document.getElementById('drum-' + id + '-h');
+  const mEl = document.getElementById('drum-' + id + '-m');
+  const getVal = (col) => {
+    const itemH = 44;
+    const idx = Math.round(col.scrollTop / itemH);
+    const items = col.querySelectorAll('.drum-item');
+    if (items[idx]) return parseInt(items[idx].dataset.val);
+    return 0;
+  };
+  const h = getVal(hEl);
+  const m = getVal(mEl);
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
 }
 
 function buildTargetOptions() {
@@ -691,8 +781,8 @@ function buildTargetOptions() {
 }
 
 function confirmTimeslot() {
-  const start = document.getElementById('ts-start').value;
-  const end = document.getElementById('ts-end').value;
+  const start = getDrumValue('start');
+  const end = getDrumValue('end');
   const val = document.getElementById('ts-target').value;
   if (!val) { alert('曲またはプレイリストを選択してください'); return; }
   if (start === end) { alert('開始と終了が同じです'); return; }
@@ -770,9 +860,6 @@ function getNowMinutes() { const n = new Date(); return n.getHours() * 60 + n.ge
 function timeToMinutes(t) { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
 function timeToSeconds(t) { const [h, m] = t.split(':').map(Number); return h * 3600 + m * 60; }
 
-// 指定スロットの終了時刻（秒）を返す（日またぎ考慮）
-function getSlotEndSeconds(slot) { return timeToSeconds(slot.end); }
-
 // 現在時刻が属するスロットを返す（フェード・余白中も含め正スロット）
 function getActiveSlot() {
   if (!state.activeRoutineId) return null;
@@ -785,47 +872,30 @@ function getActiveSlot() {
   }) || null;
 }
 
-// 次に来るスロットとその開始秒を返す
-function getNextSlot() {
-  if (!state.activeRoutineId) return null;
-  const rt = state.routines.find(r => r.id === state.activeRoutineId);
-  if (!rt || !rt.slots.length) return null;
-  const nowSec = getNowSeconds();
-  let best = null, bestDiff = Infinity;
-  rt.slots.forEach(s => {
-    let diff = timeToSeconds(s.start) - nowSec;
-    if (diff <= 0) diff += 86400;
-    if (diff < bestDiff) { bestDiff = diff; best = { slot: s, diffSec: diff }; }
-  });
-  return best;
-}
-
 function checkScheduleNow() {
-  if (isFading) return; // フェード中は割り込まない
+  if (isFading) return;
+
   const slot = getActiveSlot();
+
+  // スロット外 or 音源なし → 停止
   if (!slot) { if (isPlaying) stopPlayback(); return; }
   if (sessionLibrary.length === 0) { if (isPlaying) stopPlayback(); return; }
 
   const key = slot.type + ':' + slot.targetId;
-  const fadeSec = state.settings.fadeOutSec;
-  const gapSec = state.settings.gapSec;
-  const totalPreSec = fadeSec + gapSec; // フェード+余白の合計秒数
 
-  // 次スロットの開始まで何秒か
-  const next = getNextSlot();
-  const secToNext = next ? next.diffSec : Infinity;
-
-  // パターン③: 次スロット開始のtotalPreSec前にフェード開始
-  // 例: フェード15秒+余白10秒=25秒前からフェード開始→切り替え時刻ちょうどに次曲スタート
-  if (isPlaying && secToNext <= totalPreSec && secToNext > 0 && next) {
-    const nextKey = next.slot.type + ':' + next.slot.targetId;
-    if (nextKey !== key) {
-      // 次スロットへの移行フェードを開始
-      transitionToSlot(next.slot, secToNext);
-      return;
+  // スロットが切り替わった → フェード or 即再生
+  if (currentSlotKey !== null && currentSlotKey !== key) {
+    if (isPlaying) {
+      transitionToSlot(slot);
+    } else {
+      currentSlotKey = key;
+      buildQueue(slot);
+      startPlayback();
     }
+    return;
   }
 
+  // 初回 or 停止中 → 再生開始
   if (currentSlotKey !== key) {
     currentSlotKey = key;
     buildQueue(slot);
@@ -835,32 +905,23 @@ function checkScheduleNow() {
   }
 }
 
-// targetStartIn: 何秒後に次曲を開始するか（余白込みで調整）
-function transitionToSlot(slot, targetStartIn) {
+function transitionToSlot(slot) {
   isFading = true;
-  const fadeSec = state.settings.fadeOutSec;
-  const gapSec = state.settings.gapSec;
-  // フェードアウトにかける実際の秒数（余白分を引く）
-  const actualFadeSec = Math.max(1, targetStartIn - gapSec);
-  const fadeMs = actualFadeSec * 1000;
-  const gapMs = gapSec * 1000;
+  const fadeMs = state.settings.fadeOutSec * 1000;
+  const gapMs = state.settings.gapSec * 1000;
 
-  let startVol = audio.volume || 1;
-  let elapsed = 0;
-  const interval = 100;
-  const step = startVol / (fadeMs / interval);
+  const startVol = audio.volume > 0 ? audio.volume : 1;
+  const startTime = Date.now();
 
   const fadeInterval = setInterval(() => {
-    elapsed += interval;
-    const vol = Math.max(0, startVol - step * (elapsed / interval));
-    audio.volume = vol;
-    if (vol <= 0 || elapsed >= fadeMs) {
+    const elapsed = Date.now() - startTime;
+    const ratio = Math.min(elapsed / fadeMs, 1);
+    audio.volume = Math.max(0, startVol * (1 - ratio));
+    if (ratio >= 1) {
       clearInterval(fadeInterval);
       audio.volume = 0;
       audio.pause();
-      document.getElementById('fade-overlay').style.opacity = '0.12';
       setTimeout(() => {
-        document.getElementById('fade-overlay').style.opacity = '0';
         currentSlotKey = slot.type + ':' + slot.targetId;
         buildQueue(slot);
         audio.volume = 1;
@@ -868,7 +929,7 @@ function transitionToSlot(slot, targetStartIn) {
         startPlayback();
       }, gapMs);
     }
-  }, interval);
+  }, 50);
 }
 
 function buildQueue(slot) {
