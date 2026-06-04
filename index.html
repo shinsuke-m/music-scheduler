@@ -376,7 +376,7 @@ let state = {
   playlists: [],   // {id, name, songNames[]} ← ファイル名のみ保存
   routines: [],    // {id, name, slots:[{start,end,type,targetId}]}
   activeRoutineId: null,
-  settings: { fadeOutSec: 10, gapSec: 10 }
+  settings: { fadeOutSec: 10, gapSec: 10, darkMode: false, wakeLock: false }
 };
 
 // セッション中のみ保持（localStorageには保存しない）
@@ -405,6 +405,15 @@ function init() {
   updatePlayerDisplay();
   updateUnsavedBanner(false);
   updateLoadBanner();
+  // 保存済み画面設定を復元
+  if (state.settings.darkMode) {
+    document.getElementById('dark-toggle').checked = true;
+    toggleDark();
+  }
+  if (state.settings.wakeLock) {
+    document.getElementById('wakelock-toggle').checked = true;
+    toggleWakeLock();
+  }
 }
 
 function loadFromStorage() {
@@ -945,17 +954,23 @@ async function toggleWakeLock() {
       if ('wakeLock' in navigator) {
         wakeLock = await navigator.wakeLock.request('screen');
         document.getElementById('wakelock-status').textContent = 'スリープ防止: ON';
+        state.settings.wakeLock = true;
+        saveToStorage();
       } else { document.getElementById('wakelock-status').textContent = '非対応ブラウザです'; document.getElementById('wakelock-toggle').checked = false; }
     } catch(e) { document.getElementById('wakelock-status').textContent = '取得失敗'; document.getElementById('wakelock-toggle').checked = false; }
   } else {
     if (wakeLock) { wakeLock.release(); wakeLock = null; }
     document.getElementById('wakelock-status').textContent = 'OFF';
+    state.settings.wakeLock = false;
+    saveToStorage();
   }
 }
 
 // ===== DARK MODE =====
 function toggleDark() {
   const on = document.getElementById('dark-toggle').checked;
+  state.settings.darkMode = on;
+  saveToStorage();
   const r = document.documentElement.style;
   if (on) {
     r.setProperty('--bg','#0d0d0b'); r.setProperty('--bg2','#141411'); r.setProperty('--bg3','#1c1c18');
