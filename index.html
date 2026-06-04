@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a1a1a">
+<title>音楽スケジューラー</title>
+<link rel="manifest" href="manifest.json">
+<style>
+  :root {
+    --bg: #f5f2ec;
+    --bg2: #ede9e0;
+    --bg3: #e4dfd3;
+    --surface: #fdfbf7;
+    --surface2: #f7f4ef;
+    --text: #1a1814;
+    --text2: #5a5650;
+    --text3: #9a9590;
+    --accent: #3d6b4f;
+    --accent2: #5a9970;
+    --accent-light: #e8f2ec;
+    --danger: #c0392b;
+    --danger-light: #fdecea;
+    --warn: #d4860a;
+    --warn-light: #fef7e0;
+    --border: rgba(26,24,20,0.12);
+    --border2: rgba(26,24,20,0.08);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--text); font-size: 15px; }
+  body { display: flex; flex-direction: column; overflow: hidden; }
+
+  /* NAV */
+  .nav { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .nav-btn { flex: 1; padding: 14px 4px 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; cursor: pointer; font-size: 10px; color: var(--text3); transition: color 0.15s; position: relative; }
+  .nav-btn.active { color: var(--accent); }
+  .nav-btn.active::after { content: ''; position: absolute; bottom: 0; left: 20%; right: 20%; height: 2px; background: var(--accent); border-radius: 2px 2px 0 0; }
+  .nav-icon { font-size: 22px; line-height: 1; }
+
+  /* PAGES */
+  .pages { flex: 1; overflow: hidden; position: relative; }
+  .page { position: absolute; inset: 0; overflow-y: auto; display: none; -webkit-overflow-scrolling: touch; }
+  .page.active { display: block; }
+  .page-content { padding: 16px; padding-bottom: 32px; }
+
+  /* SECTION */
+  .section-title { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--text3); text-transform: uppercase; margin: 24px 0 8px; }
+  .section-title:first-child { margin-top: 0; }
+
+  /* CARD */
+  .card { background: var(--surface); border: 1px solid var(--border2); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .card + .card { margin-top: 10px; }
+  .card-row { display: flex; align-items: center; padding: 14px 16px; gap: 12px; }
+  .card-row + .card-row { border-top: 1px solid var(--border2); }
+  .card-row-label { flex: 1; font-size: 14px; color: var(--text); }
+  .card-row-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+
+  /* PLAYER */
+  .player-hero { background: var(--surface); border-bottom: 1px solid var(--border); padding: 20px 16px 16px; }
+  .player-status { font-size: 11px; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+  .player-track { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 4px; min-height: 26px; }
+  .player-playlist { font-size: 13px; color: var(--text2); margin-bottom: 16px; min-height: 18px; }
+  .player-controls { display: flex; align-items: center; gap: 12px; }
+  .play-btn { width: 52px; height: 52px; border-radius: 50%; background: var(--accent); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: transform 0.1s, opacity 0.15s; }
+  .play-btn:active { transform: scale(0.94); }
+  .play-btn svg { fill: white; }
+  .player-info { flex: 1; }
+  .player-time { font-size: 13px; color: var(--text2); margin-bottom: 4px; }
+  .progress-bar { height: 3px; background: var(--bg3); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.5s linear; width: 0%; }
+  .routine-pill { display: inline-flex; align-items: center; gap: 6px; background: var(--accent-light); color: var(--accent); font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(61,107,79,0.2); }
+  .routine-pill.off { background: var(--bg2); color: var(--text3); border-color: var(--border); }
+
+  /* TOGGLE */
+  .toggle { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-track { position: absolute; inset: 0; background: var(--bg3); border-radius: 13px; cursor: pointer; transition: background 0.2s; }
+  .toggle input:checked + .toggle-track { background: var(--accent); }
+  .toggle-thumb { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); pointer-events: none; }
+  .toggle input:checked ~ .toggle-thumb { left: 21px; }
+
+  /* BUTTONS */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 14px; cursor: pointer; font-family: inherit; transition: background 0.15s; }
+  .btn:active { background: var(--bg2); }
+  .btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn-primary:active { background: #2d5a3f; }
+  .btn-danger { background: var(--danger-light); color: var(--danger); border-color: rgba(192,57,43,0.2); }
+  .btn-sm { padding: 7px 12px; font-size: 13px; }
+  .btn-full { width: 100%; justify-content: center; }
+  .btn-icon { width: 36px; height: 36px; padding: 0; justify-content: center; border-radius: var(--radius-sm); }
+
+  /* MODAL */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; display: flex; align-items: flex-end; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .modal-backdrop.open { opacity: 1; pointer-events: all; }
+  .modal { background: var(--surface); border-radius: 20px 20px 0 0; width: 100%; max-height: 88vh; overflow-y: auto; padding: 0 0 env(safe-area-inset-bottom); transform: translateY(20px); transition: transform 0.2s; }
+  .modal-backdrop.open .modal { transform: translateY(0); }
+  .modal-handle { width: 36px; height: 4px; background: var(--bg3); border-radius: 2px; margin: 12px auto; }
+  .modal-title { font-size: 17px; font-weight: 600; padding: 0 16px 16px; }
+  .modal-body { padding: 0 16px 20px; }
+  .modal-footer { padding: 12px 16px; border-top: 1px solid var(--border2); display: flex; gap: 10px; }
+
+  /* FORM */
+  .form-group { margin-bottom: 16px; }
+  .form-label { font-size: 12px; color: var(--text3); font-weight: 500; margin-bottom: 6px; display: block; letter-spacing: 0.04em; }
+  .form-input { width: 100%; padding: 11px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-size: 15px; font-family: inherit; appearance: none; -webkit-appearance: none; }
+  .form-input:focus { outline: none; border-color: var(--accent); background: white; }
+  select.form-input { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239a9590' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+
+  /* TIME SLOT */
+  .timeslot { background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 8px; }
+  .timeslot-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .timeslot-time { font-size: 15px; font-weight: 600; color: var(--text); flex: 1; }
+  .timeslot-track { font-size: 13px; color: var(--text2); }
+  .timeslot-del { background: none; border: none; color: var(--text3); cursor: pointer; padding: 4px; font-size: 18px; line-height: 1; }
+
+  /* SONG LIST */
+  .song-item { display: flex; align-items: center; padding: 12px 16px; gap: 12px; cursor: pointer; transition: background 0.1s; }
+  .song-item:active { background: var(--bg2); }
+  .song-item.selected { background: var(--accent-light); }
+  .song-num { width: 28px; text-align: center; font-size: 13px; color: var(--text3); flex-shrink: 0; }
+  .song-info { flex: 1; min-width: 0; }
+  .song-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .song-detail { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .song-check { color: var(--accent); font-size: 18px; }
+
+  /* NOTICE */
+  .notice { background: var(--warn-light); border: 1px solid rgba(212,134,10,0.2); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 13px; color: var(--warn); display: flex; gap: 8px; align-items: flex-start; }
+  .notice-info { background: var(--accent-light); border-color: rgba(61,107,79,0.2); color: var(--accent); }
+
+  /* UNSAVED BANNER */
+  .unsaved-banner { position: fixed; top: 0; left: 0; right: 0; background: var(--warn); color: white; text-align: center; font-size: 13px; padding: 8px 16px; z-index: 50; transform: translateY(-100%); transition: transform 0.25s; }
+  .unsaved-banner.show { transform: translateY(0); }
+
+  /* EMPTY STATE */
+  .empty { text-align: center; padding: 40px 20px; color: var(--text3); }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty p { font-size: 14px; }
+
+  /* SCHEDULE VISUAL */
+  .schedule-bar { background: var(--bg2); border-radius: 8px; height: 8px; overflow: hidden; display: flex; margin: 8px 0; }
+  .schedule-seg { height: 100%; background: var(--accent); opacity: 0.7; }
+  .schedule-seg.gap { background: transparent; opacity: 1; }
+
+  /* CHIP */
+  .chip { display: inline-flex; align-items: center; gap: 4px; background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; font-size: 12px; color: var(--text2); }
+
+  .mt-4 { margin-top: 4px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .mt-16 { margin-top: 16px; }
+  .flex { display: flex; }
+  .flex-1 { flex: 1; }
+  .gap-8 { gap: 8px; }
+  .gap-12 { gap: 12px; }
+  .items-center { align-items: center; }
+  .justify-between { justify-content: space-between; }
+  .text-sm { font-size: 13px; }
+  .text-muted { color: var(--text3); }
+
+  .fade-overlay { position: fixed; inset: 0; background: black; opacity: 0; pointer-events: none; z-index: 200; transition: opacity 0.1s; }
+</style>
+</head>
+<body>
+
+<div class="unsaved-banner" id="unsaved-banner">未保存の変更があります — 設定タブから書き出してください</div>
+<div class="fade-overlay" id="fade-overlay"></div>
+
+<!-- NAVIGATION -->
+<nav class="nav">
+  <button class="nav-btn active" onclick="showPage('player')" id="nav-player">
+    <span class="nav-icon">▶</span>再生
+  </button>
+  <button class="nav-btn" onclick="showPage('library')" id="nav-library">
+    <span class="nav-icon">♪</span>ライブラリ
+  </button>
+  <button class="nav-btn" onclick="showPage('playlists')" id="nav-playlists">
+    <span class="nav-icon">≡</span>リスト
+  </button>
+  <button class="nav-btn" onclick="showPage('routines')" id="nav-routines">
+    <span class="nav-icon">⏰</span>ルーティン
+  </button>
+  <button class="nav-btn" onclick="showPage('settings')" id="nav-settings">
+    <span class="nav-icon">⚙</span>設定
+  </button>
+</nav>
+
+<!-- PAGES -->
+<div class="pages">
+
+  <!-- ===== PLAYER PAGE ===== -->
+  <div class="page active" id="page-player">
+    <div class="player-hero">
+      <div class="player-status" id="player-status">停止中</div>
+      <div class="player-track" id="player-track">—</div>
+      <div class="player-playlist" id="player-playlist"></div>
+      <div class="player-controls">
+        <button class="play-btn" id="play-btn" onclick="togglePlay()">
+          <svg id="play-icon" width="22" height="22" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <div class="player-info">
+          <div class="player-time" id="player-time">0:00 / 0:00</div>
+          <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="section-title">アクティブルーティン</div>
+      <div id="active-routine-display">
+        <div class="card">
+          <div class="card-row">
+            <div class="card-row-label">
+              <div style="color:var(--text3);font-size:14px;">ルーティンがONになっていません</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:20px;">今日のスケジュール</div>
+      <div id="today-schedule">
+        <div class="card"><div class="card-row"><div style="color:var(--text3);font-size:14px;">スケジュールなし</div></div></div>
+      </div>
+
+      <div class="section-title" style="margin-top:20px;">画面設定</div>
+      <div class="card">
+        <div class="card-row">
+          <div class="card-row-label">
+            <div>ダークモード（省電力）</div>
+            <div class="card-row-sub">画面を暗くして電力消費を抑える</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="dark-toggle" onchange="toggleDark()">
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+        <div class="card-row">
+          <div class="card-row-label">
+            <div>スリープ防止</div>
+            <div class="card-row-sub" id="wakelock-status">未対応またはOFF</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="wakelock-toggle" onchange="toggleWakeLock()">
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:20px;">次の切り替えまで</div>
+      <div class="card">
+        <div class="card-row">
+          <div class="card-row-label" id="next-event-display" style="color:var(--text2);font-size:14px;">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== LIBRARY PAGE ===== -->
+  <div class="page" id="page-library">
+    <div class="page-content">
+      <div class="section-title">音楽ファイルを追加</div>
+      <div class="card">
+        <div class="card-row">
+          <div class="card-row-label">
+            <div>ファイルから読み込む</div>
+            <div class="card-row-sub">MP3・WAV対応</div>
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="document.getElementById('file-input').click()">追加</button>
+          <input type="file" id="file-input" accept="audio/*" multiple style="display:none" onchange="addFiles(this)">
+        </div>
+      </div>
+      <div class="notice mt-12">
+        <span>⚠</span>
+        <span>音源ファイルはブラウザ内に保存されます。キャッシュクリア後はファイルを再度読み込んでください。設定タブで定期的にデータをエクスポートしてください。</span>
+      </div>
+
+      <div class="section-title">ライブラリ（<span id="lib-count">0</span>曲）</div>
+      <div id="library-list">
+        <div class="empty"><div class="empty-icon">♪</div><p>まだ曲がありません</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PLAYLISTS PAGE ===== -->
+  <div class="page" id="page-playlists">
+    <div class="page-content">
+      <div class="flex items-center justify-between">
+        <div class="section-title" style="margin:0;">プレイリスト</div>
+        <button class="btn btn-sm btn-primary" onclick="openPlaylistModal()">＋ 新規作成</button>
+      </div>
+      <div class="mt-12" id="playlists-list">
+        <div class="empty"><div class="empty-icon">≡</div><p>まだプレイリストがありません</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ROUTINES PAGE ===== -->
+  <div class="page" id="page-routines">
+    <div class="page-content">
+      <div class="notice notice-info mb-12" style="margin-bottom:12px;">
+        <span>ℹ</span>
+        <span>ONにできるルーティンは1つだけです。スケジュール外の時間帯（デフォルト23:00〜7:00相当）は自動停止します。</span>
+      </div>
+      <div class="flex items-center justify-between">
+        <div class="section-title" style="margin:0;">ルーティン</div>
+        <button class="btn btn-sm btn-primary" onclick="openRoutineModal()">＋ 新規作成</button>
+      </div>
+      <div class="mt-12" id="routines-list">
+        <div class="empty"><div class="empty-icon">⏰</div><p>まだルーティンがありません</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SETTINGS PAGE ===== -->
+  <div class="page" id="page-settings">
+    <div class="page-content">
+      <div class="section-title">データ管理</div>
+      <div class="card">
+        <div class="card-row">
+          <div class="card-row-label">
+            <div>設定をエクスポート</div>
+            <div class="card-row-sub">プレイリスト・ルーティンをJSONで保存</div>
+          </div>
+          <button class="btn btn-sm" onclick="exportData()">書き出し</button>
+        </div>
+        <div class="card-row">
+          <div class="card-row-label">
+            <div>設定をインポート</div>
+            <div class="card-row-sub">JSONファイルから復元</div>
+          </div>
+          <button class="btn btn-sm" onclick="document.getElementById('import-input').click()">読み込み</button>
+          <input type="file" id="import-input" accept=".json" style="display:none" onchange="importData(this)">
+        </div>
+      </div>
+
+      <div class="section-title">フェード設定</div>
+      <div class="card">
+        <div class="card-row">
+          <div class="card-row-label">
+            <div>フェードアウト時間</div>
+          </div>
+          <select class="form-input" style="width:auto;" id="fade-out-sec" onchange="saveSettings()">
+            <option value="5">5秒</option>
+            <option value="10" selected>10秒</option>
+            <option value="15">15秒</option>
+            <option value="20">20秒</option>
+          </select>
+        </div>
+        <div class="card-row">
+          <div class="card-row-label">
+            <div>切り替え余白</div>
+          </div>
+          <select class="form-input" style="width:auto;" id="gap-sec" onchange="saveSettings()">
+            <option value="5">5秒</option>
+            <option value="10" selected>10秒</option>
+            <option value="15">15秒</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section-title">使い方ガイド</div>
+      <div class="card">
+        <div class="card-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+          <div style="font-size:14px;font-weight:500;">スリープしないための設定</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.6;">
+            iOS: 設定 → 画面表示と明るさ → 自動ロック → 「なし」<br>
+            Android: 設定 → ディスプレイ → スリープ → 「スリープしない」
+          </div>
+        </div>
+        <div class="card-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+          <div style="font-size:14px;font-weight:500;">ホーム画面に追加（PWA化）</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.6;">
+            iOS Safari: 共有ボタン →「ホーム画面に追加」<br>
+            Android Chrome: メニュー →「ホーム画面に追加」
+          </div>
+        </div>
+        <div class="card-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+          <div style="font-size:14px;font-weight:500;">音源ファイルの転送（iOS）</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.6;">
+            PC → iTunes/Finder → ファイル共有 → ファイルアプリ経由<br>
+            またはiCloud Driveに置いてSafariからアクセス
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">アプリについて</div>
+      <div class="card">
+        <div class="card-row"><div class="card-row-label">バージョン</div><div style="color:var(--text3);font-size:13px;">1.0.0</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: PLAYLIST ===== -->
+<div class="modal-backdrop" id="playlist-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="playlist-modal-title">プレイリストを作成</div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">プレイリスト名</label>
+        <input class="form-input" id="playlist-name-input" type="text" placeholder="例: 朝の音楽">
+      </div>
+      <div class="form-label">曲を選択</div>
+      <div id="playlist-song-selector" style="background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border);overflow:hidden;max-height:280px;overflow-y:auto;">
+        <div class="empty" style="padding:20px;"><p>ライブラリに曲がありません</p></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn flex-1" onclick="closeModal('playlist-modal')">キャンセル</button>
+      <button class="btn btn-primary flex-1" onclick="savePlaylist()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: ROUTINE ===== -->
+<div class="modal-backdrop" id="routine-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="routine-modal-title">ルーティンを作成</div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">ルーティン名</label>
+        <input class="form-input" id="routine-name-input" type="text" placeholder="例: 平日">
+      </div>
+
+      <div class="form-label" style="margin-bottom:8px;">時間帯スロット</div>
+      <div id="timeslot-list"></div>
+      <button class="btn btn-full mt-8" onclick="addTimeslot()">＋ 時間帯を追加</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn flex-1" onclick="closeModal('routine-modal')">キャンセル</button>
+      <button class="btn btn-primary flex-1" onclick="saveRoutine()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: TIMESLOT ===== -->
+<div class="modal-backdrop" id="timeslot-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">時間帯を設定</div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">開始時刻</label>
+        <select class="form-input" id="ts-start"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">終了時刻</label>
+        <select class="form-input" id="ts-end"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">再生する曲またはプレイリスト</label>
+        <select class="form-input" id="ts-target">
+          <option value="">— 選択 —</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn flex-1" onclick="closeModal('timeslot-modal')">キャンセル</button>
+      <button class="btn btn-primary flex-1" onclick="confirmTimeslot()">追加</button>
+    </div>
+  </div>
+</div>
+
+<audio id="audio-player" style="display:none"></audio>
+
+<script>
+// ===== STATE =====
+let state = {
+  library: [],     // {id, name, size, dataUrl}
+  playlists: [],   // {id, name, songIds[]}
+  routines: [],    // {id, name, slots: [{start, end, type, targetId}]}
+  activeRoutineId: null,
+  settings: { fadeOutSec: 10, gapSec: 10 }
+};
+let editingPlaylistId = null;
+let editingRoutineId = null;
+let editingTimeslotIdx = null;
+let tempTimeslots = [];
+let selectedSongIds = new Set();
+let unsaved = false;
+let wakeLock = null;
+let schedulerTimer = null;
+let currentSlot = null;
+let isPlaying = false;
+let isFading = false;
+let currentTrackIdx = 0;
+let playQueue = [];
+const audio = document.getElementById('audio-player');
+
+// ===== INIT =====
+function init() {
+  loadFromStorage();
+  renderAll();
+  startScheduler();
+  setupAudio();
+  updatePlayerDisplay();
+  updateUnsavedBanner(false);
+}
+
+function loadFromStorage() {
+  try {
+    const d = localStorage.getItem('music-scheduler-data');
+    if (d) {
+      const parsed = JSON.parse(d);
+      state = { ...state, ...parsed };
+    }
+  } catch(e) { console.log('load error', e); }
+}
+
+function saveToStorage() {
+  try {
+    localStorage.setItem('music-scheduler-data', JSON.stringify(state));
+    unsaved = false;
+    updateUnsavedBanner(false);
+  } catch(e) { alert('保存エラー: ' + e.message); }
+}
+
+function markUnsaved() {
+  unsaved = true;
+  updateUnsavedBanner(true);
+}
+
+function updateUnsavedBanner(show) {
+  document.getElementById('unsaved-banner').classList.toggle('show', show);
+}
+
+function saveSettings() {
+  state.settings.fadeOutSec = parseInt(document.getElementById('fade-out-sec').value);
+  state.settings.gapSec = parseInt(document.getElementById('gap-sec').value);
+  saveToStorage();
+}
+
+// ===== NAVIGATION =====
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.getElementById('nav-' + name).classList.add('active');
+  if (name === 'library') renderLibrary();
+  if (name === 'playlists') renderPlaylists();
+  if (name === 'routines') renderRoutines();
+  if (name === 'player') updatePlayerDisplay();
+}
+
+// ===== LIBRARY =====
+function addFiles(input) {
+  const files = Array.from(input.files);
+  let done = 0;
+  if (!files.length) return;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const id = 'song_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      state.library.push({ id, name: file.name.replace(/\.[^.]+$/, ''), size: file.size, dataUrl: e.target.result });
+      done++;
+      if (done === files.length) {
+        saveToStorage();
+        renderLibrary();
+        markUnsaved();
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+}
+
+function renderLibrary() {
+  const el = document.getElementById('library-list');
+  document.getElementById('lib-count').textContent = state.library.length;
+  if (!state.library.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">♪</div><p>まだ曲がありません</p></div>';
+    return;
+  }
+  el.innerHTML = '<div class="card">' + state.library.map((s, i) => `
+    <div class="card-row">
+      <div style="width:24px;text-align:center;color:var(--text3);font-size:13px;">${i+1}</div>
+      <div class="flex-1">
+        <div style="font-size:14px;font-weight:500;">${esc(s.name)}</div>
+        <div style="font-size:12px;color:var(--text3);">${formatBytes(s.size)}</div>
+      </div>
+      <button class="btn btn-sm btn-danger" onclick="deleteSong('${s.id}')">削除</button>
+    </div>
+  `).join('') + '</div>';
+}
+
+function deleteSong(id) {
+  if (!confirm('この曲を削除しますか？')) return;
+  state.library = state.library.filter(s => s.id !== id);
+  state.playlists.forEach(p => { p.songIds = p.songIds.filter(sid => sid !== id); });
+  saveToStorage();
+  renderLibrary();
+  markUnsaved();
+}
+
+// ===== PLAYLISTS =====
+function openPlaylistModal(id) {
+  editingPlaylistId = id || null;
+  selectedSongIds = new Set();
+  const pl = id ? state.playlists.find(p => p.id === id) : null;
+  document.getElementById('playlist-modal-title').textContent = id ? 'プレイリストを編集' : 'プレイリストを作成';
+  document.getElementById('playlist-name-input').value = pl ? pl.name : '';
+  if (pl) pl.songIds.forEach(sid => selectedSongIds.add(sid));
+  renderPlaylistSongSelector();
+  openModal('playlist-modal');
+}
+
+function renderPlaylistSongSelector() {
+  const el = document.getElementById('playlist-song-selector');
+  if (!state.library.length) {
+    el.innerHTML = '<div class="empty" style="padding:20px;"><p>ライブラリに曲がありません</p></div>';
+    return;
+  }
+  el.innerHTML = state.library.map((s, i) => `
+    <div class="song-item ${selectedSongIds.has(s.id) ? 'selected' : ''}" onclick="toggleSongSelect('${s.id}', this)">
+      <div class="song-num">${selectedSongIds.has(s.id) ? '✓' : i+1}</div>
+      <div class="song-info"><div class="song-name">${esc(s.name)}</div></div>
+    </div>
+  `).join('');
+}
+
+function toggleSongSelect(id, el) {
+  if (selectedSongIds.has(id)) { selectedSongIds.delete(id); }
+  else { selectedSongIds.add(id); }
+  renderPlaylistSongSelector();
+}
+
+function savePlaylist() {
+  const name = document.getElementById('playlist-name-input').value.trim();
+  if (!name) { alert('名前を入力してください'); return; }
+  const songIds = [...selectedSongIds];
+  if (editingPlaylistId) {
+    const pl = state.playlists.find(p => p.id === editingPlaylistId);
+    pl.name = name; pl.songIds = songIds;
+  } else {
+    state.playlists.push({ id: 'pl_' + Date.now(), name, songIds });
+  }
+  saveToStorage();
+  renderPlaylists();
+  closeModal('playlist-modal');
+  markUnsaved();
+}
+
+function renderPlaylists() {
+  const el = document.getElementById('playlists-list');
+  if (!state.playlists.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">≡</div><p>まだプレイリストがありません</p></div>';
+    return;
+  }
+  el.innerHTML = state.playlists.map(pl => `
+    <div class="card" style="margin-bottom:10px;">
+      <div class="card-row">
+        <div class="flex-1">
+          <div style="font-size:15px;font-weight:500;">${esc(pl.name)}</div>
+          <div style="font-size:12px;color:var(--text3);">${pl.songIds.length}曲</div>
+        </div>
+        <button class="btn btn-sm" onclick="openPlaylistModal('${pl.id}')">編集</button>
+        <button class="btn btn-sm btn-danger" onclick="deletePlaylist('${pl.id}')" style="margin-left:6px;">削除</button>
+      </div>
+      ${pl.songIds.length ? `<div style="padding:0 16px 12px;display:flex;flex-wrap:wrap;gap:6px;">
+        ${pl.songIds.map(sid => {
+          const s = state.library.find(x => x.id === sid);
+          return s ? `<span class="chip">${esc(s.name)}</span>` : '';
+        }).join('')}
+      </div>` : ''}
+    </div>
+  `).join('');
+}
+
+function deletePlaylist(id) {
+  if (!confirm('このプレイリストを削除しますか？')) return;
+  state.playlists = state.playlists.filter(p => p.id !== id);
+  saveToStorage();
+  renderPlaylists();
+  markUnsaved();
+}
+
+// ===== ROUTINES =====
+function openRoutineModal(id) {
+  editingRoutineId = id || null;
+  const rt = id ? state.routines.find(r => r.id === id) : null;
+  document.getElementById('routine-modal-title').textContent = id ? 'ルーティンを編集' : 'ルーティンを作成';
+  document.getElementById('routine-name-input').value = rt ? rt.name : '';
+  tempTimeslots = rt ? JSON.parse(JSON.stringify(rt.slots)) : [];
+  renderTimeslotList();
+  openModal('routine-modal');
+}
+
+function renderTimeslotList() {
+  const el = document.getElementById('timeslot-list');
+  if (!tempTimeslots.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0;">まだ時間帯がありません</div>';
+    return;
+  }
+  el.innerHTML = tempTimeslots.map((ts, i) => {
+    const targetName = getTargetName(ts.type, ts.targetId);
+    return `<div class="timeslot">
+      <div class="timeslot-header">
+        <div class="timeslot-time">${ts.start} 〜 ${ts.end}</div>
+        <button class="timeslot-del" onclick="removeTimeslot(${i})">✕</button>
+      </div>
+      <div class="timeslot-track">${targetName || '（未設定）'}</div>
+    </div>`;
+  }).join('');
+}
+
+function getTargetName(type, id) {
+  if (type === 'song') { const s = state.library.find(x => x.id === id); return s ? '♪ ' + s.name : ''; }
+  if (type === 'playlist') { const p = state.playlists.find(x => x.id === id); return p ? '≡ ' + p.name : ''; }
+  return '';
+}
+
+function addTimeslot() {
+  buildTimeOptions();
+  buildTargetOptions();
+  editingTimeslotIdx = null;
+  openModal('timeslot-modal');
+}
+
+function removeTimeslot(i) {
+  tempTimeslots.splice(i, 1);
+  renderTimeslotList();
+}
+
+function buildTimeOptions() {
+  const times = [];
+  for (let h = 0; h < 24; h++) {
+    for (let m of [0, 30]) {
+      times.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+    }
+  }
+  const startEl = document.getElementById('ts-start');
+  const endEl = document.getElementById('ts-end');
+  startEl.innerHTML = times.map(t => `<option value="${t}">${t}</option>`).join('');
+  endEl.innerHTML = times.map(t => `<option value="${t}">${t}</option>`).join('');
+  startEl.value = '07:00';
+  endEl.value = '15:00';
+}
+
+function buildTargetOptions() {
+  const el = document.getElementById('ts-target');
+  let opts = '<option value="">— 選択 —</option>';
+  if (state.library.length) {
+    opts += '<optgroup label="曲">' + state.library.map(s => `<option value="song:${s.id}">♪ ${esc(s.name)}</option>`).join('') + '</optgroup>';
+  }
+  if (state.playlists.length) {
+    opts += '<optgroup label="プレイリスト">' + state.playlists.map(p => `<option value="playlist:${p.id}">≡ ${esc(p.name)}</option>`).join('') + '</optgroup>';
+  }
+  el.innerHTML = opts;
+}
+
+function confirmTimeslot() {
+  const start = document.getElementById('ts-start').value;
+  const end = document.getElementById('ts-end').value;
+  const targetVal = document.getElementById('ts-target').value;
+  if (!targetVal) { alert('曲またはプレイリストを選択してください'); return; }
+  if (start === end) { alert('開始と終了が同じです'); return; }
+  const [type, targetId] = targetVal.split(':');
+  tempTimeslots.push({ start, end, type, targetId });
+  tempTimeslots.sort((a, b) => a.start.localeCompare(b.start));
+  renderTimeslotList();
+  closeModal('timeslot-modal');
+}
+
+function saveRoutine() {
+  const name = document.getElementById('routine-name-input').value.trim();
+  if (!name) { alert('名前を入力してください'); return; }
+  if (editingRoutineId) {
+    const rt = state.routines.find(r => r.id === editingRoutineId);
+    rt.name = name; rt.slots = tempTimeslots;
+  } else {
+    if (state.routines.length >= 5) { alert('ルーティンは最大5つまでです'); return; }
+    state.routines.push({ id: 'rt_' + Date.now(), name, slots: tempTimeslots });
+  }
+  saveToStorage();
+  renderRoutines();
+  closeModal('routine-modal');
+  markUnsaved();
+}
+
+function renderRoutines() {
+  const el = document.getElementById('routines-list');
+  if (!state.routines.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">⏰</div><p>まだルーティンがありません</p></div>';
+    return;
+  }
+  el.innerHTML = state.routines.map(rt => {
+    const isActive = rt.id === state.activeRoutineId;
+    return `<div class="card" style="margin-bottom:10px;${isActive ? 'border-color:var(--accent);border-width:2px;' : ''}">
+      <div class="card-row">
+        <div class="flex-1">
+          <div style="font-size:15px;font-weight:500;">${esc(rt.name)}</div>
+          <div style="font-size:12px;color:var(--text3);">${rt.slots.length}スロット</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" ${isActive ? 'checked' : ''} onchange="toggleRoutine('${rt.id}', this.checked)">
+          <span class="toggle-track"></span>
+          <span class="toggle-thumb"></span>
+        </label>
+      </div>
+      ${rt.slots.map(s => `
+        <div class="card-row" style="padding:10px 16px;">
+          <div style="font-size:13px;color:var(--text2);min-width:90px;">${s.start} 〜 ${s.end}</div>
+          <div style="font-size:13px;color:var(--text);flex:1;">${getTargetName(s.type, s.targetId)}</div>
+        </div>
+      `).join('')}
+      <div class="card-row">
+        <button class="btn btn-sm" onclick="openRoutineModal('${rt.id}')">編集</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteRoutine('${rt.id}')" style="margin-left:6px;">削除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleRoutine(id, checked) {
+  if (checked) {
+    state.activeRoutineId = id;
+  } else {
+    if (state.activeRoutineId === id) state.activeRoutineId = null;
+  }
+  saveToStorage();
+  renderRoutines();
+  updatePlayerDisplay();
+  checkScheduleNow();
+}
+
+function deleteRoutine(id) {
+  if (!confirm('このルーティンを削除しますか？')) return;
+  if (state.activeRoutineId === id) state.activeRoutineId = null;
+  state.routines = state.routines.filter(r => r.id !== id);
+  saveToStorage();
+  renderRoutines();
+  markUnsaved();
+}
+
+// ===== SCHEDULER =====
+function startScheduler() {
+  clearInterval(schedulerTimer);
+  schedulerTimer = setInterval(tick, 10000);
+  tick();
+}
+
+function tick() {
+  updatePlayerDisplay();
+  checkScheduleNow();
+  updateNextEvent();
+}
+
+function getNowMinutes() {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+function timeToMinutes(t) {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function minutesToTime(m) {
+  return String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+}
+
+function getActiveSlot() {
+  if (!state.activeRoutineId) return null;
+  const rt = state.routines.find(r => r.id === state.activeRoutineId);
+  if (!rt) return null;
+  const now = getNowMinutes();
+  return rt.slots.find(s => {
+    const start = timeToMinutes(s.start);
+    const end = timeToMinutes(s.end);
+    if (start < end) return now >= start && now < end;
+    return now >= start || now < end;
+  }) || null;
+}
+
+function checkScheduleNow() {
+  const slot = getActiveSlot();
+  if (!slot && isPlaying) {
+    stopPlayback();
+    return;
+  }
+  if (slot && !isPlaying && !isFading) {
+    const key = slot.type + ':' + slot.targetId;
+    if (currentSlot !== key) {
+      currentSlot = key;
+      buildQueue(slot);
+      startPlayback();
+    } else if (!isPlaying) {
+      startPlayback();
+    }
+  }
+  if (slot) {
+    const key = slot.type + ':' + slot.targetId;
+    if (currentSlot !== key) {
+      transitionToSlot(slot);
+    }
+  }
+}
+
+function transitionToSlot(slot) {
+  isFading = true;
+  const fadeMs = state.settings.fadeOutSec * 1000;
+  const gapMs = state.settings.gapSec * 1000;
+  let vol = audio.volume;
+  const step = vol / (fadeMs / 100);
+  const fadeInterval = setInterval(() => {
+    vol = Math.max(0, vol - step);
+    audio.volume = vol;
+    if (vol <= 0) {
+      clearInterval(fadeInterval);
+      audio.pause();
+      document.getElementById('fade-overlay').style.opacity = '0.12';
+      setTimeout(() => {
+        document.getElementById('fade-overlay').style.opacity = '0';
+        currentSlot = slot.type + ':' + slot.targetId;
+        buildQueue(slot);
+        audio.volume = 1;
+        isFading = false;
+        startPlayback();
+      }, gapMs);
+    }
+  }, 100);
+}
+
+function buildQueue(slot) {
+  if (slot.type === 'song') {
+    const s = state.library.find(x => x.id === slot.targetId);
+    playQueue = s ? [s] : [];
+  } else {
+    const pl = state.playlists.find(x => x.id === slot.targetId);
+    if (!pl) { playQueue = []; return; }
+    playQueue = pl.songIds.map(id => state.library.find(x => x.id === id)).filter(Boolean);
+  }
+  currentTrackIdx = 0;
+}
+
+function startPlayback() {
+  if (!playQueue.length) return;
+  const song = playQueue[currentTrackIdx % playQueue.length];
+  audio.src = song.dataUrl;
+  audio.volume = 1;
+  audio.play().then(() => {
+    isPlaying = true;
+    updatePlayBtn();
+    updatePlayerDisplay();
+  }).catch(e => { console.log('play error', e); });
+}
+
+function stopPlayback() {
+  audio.pause();
+  isPlaying = false;
+  updatePlayBtn();
+  updatePlayerDisplay();
+}
+
+function togglePlay() {
+  if (isPlaying) {
+    audio.pause();
+    isPlaying = false;
+  } else {
+    if (!audio.src && playQueue.length) {
+      startPlayback();
+      return;
+    }
+    audio.play().then(() => { isPlaying = true; }).catch(() => {});
+  }
+  updatePlayBtn();
+  updatePlayerDisplay();
+}
+
+function updatePlayBtn() {
+  const icon = document.getElementById('play-icon');
+  if (isPlaying) {
+    icon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+  } else {
+    icon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+  }
+}
+
+function updatePlayerDisplay() {
+  const slot = getActiveSlot();
+  const rt = state.activeRoutineId ? state.routines.find(r => r.id === state.activeRoutineId) : null;
+
+  // Status
+  let statusText = '停止中';
+  if (!state.activeRoutineId) statusText = 'ルーティン OFF';
+  else if (isFading) statusText = 'フェードアウト中...';
+  else if (isPlaying) statusText = '再生中';
+  else if (slot) statusText = '準備中';
+  document.getElementById('player-status').textContent = statusText;
+
+  // Track
+  if (isPlaying || (audio.src && audio.paused)) {
+    const song = playQueue[currentTrackIdx % Math.max(1, playQueue.length)];
+    if (song) {
+      document.getElementById('player-track').textContent = song.name;
+    }
+  } else {
+    document.getElementById('player-track').textContent = slot ? getTargetName(slot.type, slot.targetId) : '—';
+  }
+
+  // Playlist info
+  if (slot && slot.type === 'playlist') {
+    const pl = state.playlists.find(x => x.id === slot.targetId);
+    document.getElementById('player-playlist').textContent = pl ? `プレイリスト: ${pl.name}` : '';
+  } else {
+    document.getElementById('player-playlist').textContent = '';
+  }
+
+  // Active routine display
+  const rtDisplay = document.getElementById('active-routine-display');
+  if (rt) {
+    rtDisplay.innerHTML = `<div class="card"><div class="card-row">
+      <div class="flex-1"><div style="font-size:15px;font-weight:500;">${esc(rt.name)}</div>
+      <div style="font-size:12px;color:var(--text3);">${rt.slots.length}スロット</div></div>
+      <span class="routine-pill"><span>●</span> ON</span>
+    </div></div>`;
+  } else {
+    rtDisplay.innerHTML = `<div class="card"><div class="card-row">
+      <div style="color:var(--text3);font-size:14px;">ルーティンがONになっていません</div>
+    </div></div>`;
+  }
+
+  // Today's schedule
+  renderTodaySchedule(rt);
+
+  // Settings values
+  document.getElementById('fade-out-sec').value = state.settings.fadeOutSec;
+  document.getElementById('gap-sec').value = state.settings.gapSec;
+}
+
+function renderTodaySchedule(rt) {
+  const el = document.getElementById('today-schedule');
+  if (!rt || !rt.slots.length) {
+    el.innerHTML = '<div class="card"><div class="card-row"><div style="color:var(--text3);font-size:14px;">スケジュールなし</div></div></div>';
+    return;
+  }
+  const nowMin = getNowMinutes();
+  el.innerHTML = '<div class="card">' + rt.slots.map(s => {
+    const start = timeToMinutes(s.start);
+    const end = timeToMinutes(s.end);
+    let isNow = false;
+    if (start < end) isNow = nowMin >= start && nowMin < end;
+    else isNow = nowMin >= start || nowMin < end;
+    return `<div class="card-row" style="${isNow ? 'background:var(--accent-light);' : ''}">
+      <div style="font-size:13px;color:var(--text2);min-width:90px;font-weight:${isNow?'500':'400'};">${s.start} 〜 ${s.end}</div>
+      <div style="flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${getTargetName(s.type, s.targetId)}</div>
+      ${isNow ? '<span style="font-size:10px;color:var(--accent);font-weight:600;">▶ 再生中</span>' : ''}
+    </div>`;
+  }).join('') + '</div>';
+}
+
+function updateNextEvent() {
+  const el = document.getElementById('next-event-display');
+  if (!state.activeRoutineId) { el.textContent = 'ルーティンがOFFです'; return; }
+  const rt = state.routines.find(r => r.id === state.activeRoutineId);
+  if (!rt || !rt.slots.length) { el.textContent = 'スケジュールなし'; return; }
+  const nowMin = getNowMinutes();
+  let next = null;
+  let minDiff = Infinity;
+  rt.slots.forEach(s => {
+    const start = timeToMinutes(s.start);
+    const end = timeToMinutes(s.end);
+    let diff = start - nowMin;
+    if (diff <= 0) diff += 24 * 60;
+    if (diff < minDiff) { minDiff = diff; next = { s, diff, type: 'start' }; }
+    let ediff = end - nowMin;
+    if (ediff <= 0) ediff += 24 * 60;
+    if (ediff < minDiff) { minDiff = ediff; next = { s, diff: ediff, type: 'end' }; }
+  });
+  if (!next) { el.textContent = '—'; return; }
+  const h = Math.floor(next.diff / 60);
+  const m = next.diff % 60;
+  const label = next.type === 'start' ? '再生開始' : '切り替え/停止';
+  el.textContent = `次の${label}まで ${h > 0 ? h + '時間' : ''}${m}分`;
+}
+
+// ===== AUDIO EVENTS =====
+function setupAudio() {
+  audio.addEventListener('ended', () => {
+    currentTrackIdx = (currentTrackIdx + 1) % Math.max(1, playQueue.length);
+    if (playQueue.length) startPlayback();
+  });
+  audio.addEventListener('timeupdate', () => {
+    if (!audio.duration) return;
+    const pct = (audio.currentTime / audio.duration * 100).toFixed(1);
+    document.getElementById('progress-fill').style.width = pct + '%';
+    document.getElementById('player-time').textContent = formatTime(audio.currentTime) + ' / ' + formatTime(audio.duration);
+  });
+  audio.addEventListener('pause', () => { isPlaying = false; updatePlayBtn(); });
+  audio.addEventListener('play', () => { isPlaying = true; updatePlayBtn(); });
+  // Auto-resume on interruption
+  audio.addEventListener('pause', () => {
+    setTimeout(() => {
+      const slot = getActiveSlot();
+      if (slot && !isFading && audio.paused && state.activeRoutineId) {
+        audio.play().catch(() => {});
+      }
+    }, 3000);
+  });
+}
+
+// ===== WAKE LOCK =====
+async function toggleWakeLock() {
+  const checked = document.getElementById('wakelock-toggle').checked;
+  if (checked) {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        document.getElementById('wakelock-status').textContent = 'スリープ防止: ON';
+      } else {
+        document.getElementById('wakelock-status').textContent = '非対応ブラウザです';
+        document.getElementById('wakelock-toggle').checked = false;
+      }
+    } catch(e) {
+      document.getElementById('wakelock-status').textContent = '取得失敗';
+      document.getElementById('wakelock-toggle').checked = false;
+    }
+  } else {
+    if (wakeLock) { wakeLock.release(); wakeLock = null; }
+    document.getElementById('wakelock-status').textContent = 'OFF';
+  }
+}
+
+// ===== DARK MODE =====
+function toggleDark() {
+  const checked = document.getElementById('dark-toggle').checked;
+  if (checked) {
+    document.documentElement.style.setProperty('--bg', '#0d0d0b');
+    document.documentElement.style.setProperty('--bg2', '#141411');
+    document.documentElement.style.setProperty('--bg3', '#1c1c18');
+    document.documentElement.style.setProperty('--surface', '#111110');
+    document.documentElement.style.setProperty('--surface2', '#161614');
+    document.documentElement.style.setProperty('--text', '#e8e4de');
+    document.documentElement.style.setProperty('--text2', '#a09a92');
+    document.documentElement.style.setProperty('--text3', '#5a5650');
+    document.documentElement.style.setProperty('--border', 'rgba(232,228,222,0.1)');
+    document.documentElement.style.setProperty('--border2', 'rgba(232,228,222,0.06)');
+  } else {
+    document.documentElement.style.setProperty('--bg', '#f5f2ec');
+    document.documentElement.style.setProperty('--bg2', '#ede9e0');
+    document.documentElement.style.setProperty('--bg3', '#e4dfd3');
+    document.documentElement.style.setProperty('--surface', '#fdfbf7');
+    document.documentElement.style.setProperty('--surface2', '#f7f4ef');
+    document.documentElement.style.setProperty('--text', '#1a1814');
+    document.documentElement.style.setProperty('--text2', '#5a5650');
+    document.documentElement.style.setProperty('--text3', '#9a9590');
+    document.documentElement.style.setProperty('--border', 'rgba(26,24,20,0.12)');
+    document.documentElement.style.setProperty('--border2', 'rgba(26,24,20,0.08)');
+  }
+}
+
+// ===== EXPORT / IMPORT =====
+function exportData() {
+  const exportData = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    playlists: state.playlists,
+    routines: state.routines,
+    activeRoutineId: state.activeRoutineId,
+    settings: state.settings
+  };
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'music-scheduler-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  updateUnsavedBanner(false);
+  unsaved = false;
+}
+
+function importData(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.playlists) state.playlists = data.playlists;
+      if (data.routines) state.routines = data.routines;
+      if (data.activeRoutineId !== undefined) state.activeRoutineId = data.activeRoutineId;
+      if (data.settings) state.settings = { ...state.settings, ...data.settings };
+      saveToStorage();
+      renderAll();
+      alert('インポート完了しました');
+    } catch(e) {
+      alert('読み込みエラー: ' + e.message);
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+// ===== MODAL HELPERS =====
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+document.querySelectorAll('.modal-backdrop').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+});
+
+// ===== UTILS =====
+function renderAll() {
+  renderLibrary();
+  renderPlaylists();
+  renderRoutines();
+  updatePlayerDisplay();
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+function formatTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return m + ':' + String(sec).padStart(2, '0');
+}
+
+// ===== START =====
+init();
+</script>
+</body>
+</html>
